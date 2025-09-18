@@ -1,4 +1,4 @@
-# Backend AI Service
+# Monte Carlo Tree Search heuristic algorithm in-game implementation 
 
 
 
