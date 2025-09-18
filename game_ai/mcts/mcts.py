@@ -93,29 +93,34 @@ class MonteCarloTreeSearchImplementation:
             node.children.append(Node(child_state, node))
 
     def _simulate(self, state):
-        # light-weight random playout, limited depth
+        """Light-weight random playout with neutral action selection."""
         cur = state.clone()
         depth = 0
         while not cur.is_game_over() and depth < self.rollout_depth:
-            armies = cur.get_all_armies()
-            if not armies:
-                break
-            # pick a random acting army (simplify: use current_army)
-            acting_army = cur.current_army
-            units = cur.get_units_of_army(acting_army)
+            units = cur.get_units_of_army(cur.current_army)
             if not units:
                 break
             u = random.choice(units)
+
+            # Collect all possible actions
+            actions = []
             attacks = cur.get_legal_attack_range_of_unit(u)
-            if attacks:
-                cur = cur.attack(u, random.choice(attacks))
+            moves = cur.get_legal_move_range_of_unit(u)
+            actions += [("attack", t) for t in attacks]
+            actions += [("move", m) for m in moves]
+
+            if not actions:
+                break
+
+            # Pick a random action (attack or move) equally likely
+            kind, target = random.choice(actions)
+            if kind == "attack":
+                cur = cur.attack(u, target)
             else:
-                moves = cur.get_legal_move_range_of_unit(u)
-                if moves:
-                    cur = cur.make_move(u, random.choice(moves))
-                else:
-                    break
+                cur = cur.make_move(u, target)
+
             depth += 1
+
         return cur.reward()
 
     def _backpropagate(self, node, reward):
