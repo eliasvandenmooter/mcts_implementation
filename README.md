@@ -20,4 +20,11 @@ $$
 \text{UCB1} = \frac{w_i}{n_i} + c \cdot \sqrt{\frac{\ln N}{n_i}}
 $$
 
+Where:
+
+- $\bar{X}_i$ is the average reward of node $i$  
+- $c$ is the exploration parameter (typically $\sqrt{2}$)  
+- $N$ is the total number of visits to the parent node  
+- $n_i$ is the number of visits to node $i$
+
 The first term encourages exploitation of nodes with high average rewards, while the second term promotes exploration of less-visited nodes. The logarithmic factor ensures that exploration decreases over time as confidence in the estimates increases.
