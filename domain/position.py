@@ -1,4 +1,4 @@
-# domain/position.py
+
 class Position:
     def __init__(self, pos_id, x, y, surface="GRASS", unit=None):
         self.id = str(pos_id)

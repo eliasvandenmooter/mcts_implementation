@@ -18,8 +18,8 @@ ACTIONS_PER_TURN = 2
 PREVIEW_DELAY = 1000
 
 # MCTS config
-ROLLOUT_DEPTH = 25
-ROLLOUTS = 500
+ROLLOUT_DEPTH = 100
+ROLLOUTS = 1000
 
 # UI colors
 BG = (30, 30, 30)
@@ -33,12 +33,6 @@ ARMY_COLORS = {
     "AI": ((30, 130, 230), "blue"),
     "Opponent": ((220, 60, 60), "red")
 }
-
-pygame.init()
-FONT = pygame.font.SysFont("Consolas", 14)
-SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Duckling Wars - MCTS Demo")
-CLOCK = pygame.time.Clock()
 
 
 # ---------------- Random Opponent ----------------
@@ -85,6 +79,7 @@ def draw_units(screen, state):
 def clamp(x, lo=0, hi=255):
     return max(lo, min(int(x), hi))
 
+
 def draw_heatmap(screen, heatmap):
     if not heatmap:
         return
@@ -100,7 +95,7 @@ def draw_heatmap(screen, heatmap):
         b = 0
 
         s = pygame.Surface((CELL_PIXEL, CELL_PIXEL), pygame.SRCALPHA)
-        s.fill((r, g, b, HEAT_ALPHA))  # safe now
+        s.fill((r, g, b, HEAT_ALPHA))
         screen.blit(s, (x * CELL_PIXEL, y * CELL_PIXEL))
 
 
@@ -112,7 +107,7 @@ def highlight_target(screen, target):
 
 
 # ---------------- Self-play ----------------
-def self_play():
+def self_play(screen, font, clock):
     state = DucklingWarsState.generate_sample_game_state(
         board_size=BOARD_SIZE,
         armies=("AI", "Opponent")
@@ -146,11 +141,11 @@ def self_play():
                     hmap, st = {}, []
 
                 # ---------------- PREVIEW ----------------
-                SCREEN.fill(BG)
-                draw_grid(SCREEN)
-                draw_units(SCREEN, state)
-                draw_heatmap(SCREEN, hmap)
-                highlight_target(SCREEN, target)
+                screen.fill(BG)
+                draw_grid(screen)
+                draw_units(screen, state)
+                draw_heatmap(screen, hmap)
+                highlight_target(screen, target)
                 pygame.display.flip()
                 pygame.time.delay(PREVIEW_DELAY)
 
@@ -173,24 +168,24 @@ def self_play():
                 actions_taken[state.current_army] = 0
 
         # ---------------- DRAW FRAME ----------------
-        SCREEN.fill(BG)
-        draw_grid(SCREEN)
-        draw_heatmap(SCREEN, heatmap)
-        draw_units(SCREEN, state)
-        highlight_target(SCREEN, chosen_target)
+        screen.fill(BG)
+        draw_grid(screen)
+        draw_heatmap(screen, heatmap)
+        draw_units(screen, state)
+        highlight_target(screen, chosen_target)
 
         # sidebar
         x0 = BOARD_SIZE * CELL_PIXEL + 10
         y0 = 10
-        SCREEN.blit(FONT.render("AI stats & heatmap", True, (240, 240, 240)), (x0, y0))
+        screen.blit(font.render("AI stats & heatmap", True, (240, 240, 240)), (x0, y0))
         y0 += 26
         color_name = ARMY_COLORS[state.current_army][1]
-        SCREEN.blit(FONT.render(f"Current army: {state.current_army} ({color_name})", True, (220, 220, 220)), (x0, y0))
+        screen.blit(font.render(f"Current army: {state.current_army} ({color_name})", True, (220, 220, 220)), (x0, y0))
         y0 += 24
         for kind, unit, target, score in stats:
             _, cname = ARMY_COLORS[unit.army]
             mark = "<-- chosen" if target == chosen_target else ""
-            SCREEN.blit(FONT.render(
+            screen.blit(font.render(
                 f"{kind.upper()} {unit.unit_category} ({unit.army} ({cname})) -> "
                 f"({target.x},{target.y}) | score: {(score*10):.2f} {mark}",
                 True, (200, 200, 200)), (x0, y0))
@@ -199,14 +194,21 @@ def self_play():
         if paused:
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             s.fill((0, 0, 0, 100))
-            SCREEN.blit(s, (0, 0))
-            txt = FONT.render("PAUSED - Press P to resume", True, (255, 255, 255))
-            SCREEN.blit(txt, (WIDTH // 2 - txt.get_width() // 2, HEIGHT // 2 - txt.get_height() // 2))
+            screen.blit(s, (0, 0))
+            txt = font.render("PAUSED - Press P to resume", True, (255, 255, 255))
+            screen.blit(txt, (WIDTH // 2 - txt.get_width() // 2, HEIGHT // 2 - txt.get_height() // 2))
 
         pygame.display.flip()
         pygame.time.delay(3000)
-        CLOCK.tick(FPS)
+        clock.tick(FPS)
 
 
+# ---------------- Entry point ----------------
 if __name__ == "__main__":
-    self_play()
+    pygame.init()
+    font = pygame.font.SysFont("Consolas", 14)
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("Duckling Wars - MCTS Demo")
+    clock = pygame.time.Clock()
+
+    self_play(screen, font, clock)
