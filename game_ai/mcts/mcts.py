@@ -10,17 +10,17 @@ class Node:
         self.children = []
         self.visits = 0
         self.reward = 0.0
-        self.action = action   # (kind, pos)
-        self.unit = unit       # which unit acted
+        self.action = action
+        self.unit = unit
 
-    def uct(self, c=math.sqrt(2)):
+    def uct(self, c):
         if self.visits == 0:
             return float("inf")
         return (self.reward / self.visits) + c * math.sqrt(math.log(self.parent.visits + 1) / self.visits)
 
 
 class MonteCarloTreeSearchImplementation:
-    def __init__(self, exploration=1.0, rollout_depth=20):
+    def __init__(self, exploration=math.sqrt(2), rollout_depth=20):
         self.exploration = exploration
         self.rollout_depth = rollout_depth
 
