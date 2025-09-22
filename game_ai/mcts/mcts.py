@@ -1,20 +1,19 @@
-# game_ai/mcts/mcts.py
 import math
 import random
-from copy import deepcopy
-
 
 class Node:
-    __slots__ = ("state", "parent", "children", "visits", "reward")
+    __slots__ = ("state", "parent", "children", "visits", "reward", "action", "unit")
 
-    def __init__(self, state, parent=None):
+    def __init__(self, state, parent=None, action=None, unit=None):
         self.state = state
         self.parent = parent
-        self.children = []  # list of Node
+        self.children = []
         self.visits = 0
         self.reward = 0.0
+        self.action = action   # (kind, pos)
+        self.unit = unit       # which unit acted
 
-    def uct(self, c=1.0):
+    def uct(self, c=math.sqrt(2)):
         if self.visits == 0:
             return float("inf")
         return (self.reward / self.visits) + c * math.sqrt(math.log(self.parent.visits + 1) / self.visits)
@@ -25,75 +24,50 @@ class MonteCarloTreeSearchImplementation:
         self.exploration = exploration
         self.rollout_depth = rollout_depth
 
-    def do_rollout(self, state, unit_index=0):
-        """One rollout: select->expand->simulate->backprop."""
-        root = Node(state)
+    def do_rollout(self, root):
+        """Run one MCTS iteration starting from root Node."""
         node = self._select(root)
         if not node.state.is_game_over():
-            self._expand(node, unit_index)
+            self._expand(node)
             if node.children:
                 node = random.choice(node.children)
         reward = self._simulate(node.state)
         self._backpropagate(node, reward)
 
-    def choose(self, state, unit_index=0):
-        """
-        Run a small budget of rollouts and return the best child state for the root.
-        This implementation runs a few deterministic rollouts then picks best child by visits.
-        """
+    def choose(self, state, rollouts=50):
+        """Run several rollouts and return the best child of root."""
         root = Node(state)
-        # Expand root once to populate children
-        self._expand(root, unit_index)
-        # limited rollouts budget
-        budget = max(10, 30)  # keep small to reduce CPU load
-        for _ in range(budget):
-            node = self._select(root)
-            if not node.state.is_game_over():
-                self._expand(node, unit_index)
-                if node.children:
-                    node = random.choice(node.children)
-            reward = self._simulate(node.state)
-            self._backpropagate(node, reward)
+        self._expand(root)
 
-        # choose child with highest visits, fallback to a random child
+        for _ in range(rollouts):
+            self.do_rollout(root)
+
         if not root.children:
-            return state
-        best = max(root.children, key=lambda n: n.visits)
-        return best.state
+            return state, None
 
+        best = max(root.children, key=lambda n: n.visits)
+        return best.state, (best.action, best.unit)
+
+    # ---- internals ----
     def _select(self, node):
-        # descend until leaf
         while node.children:
             node = max(node.children, key=lambda c: c.uct(self.exploration))
         return node
 
-    def _expand(self, node, unit_index=0):
+    def _expand(self, node):
         state = node.state
-        # pick units for the current turn
-        armies = state.get_all_armies()
-        if not armies:
-            return
-        # use current army from state.current_army (string)
-        cur_army = state.current_army
-        units = state.get_units_of_army(cur_army)
+        units = state.get_units_of_army(state.current_army)
         if not units:
             return
-        unit = units[unit_index % len(units)]
-
-        # moves
-        moves = state.get_legal_move_range_of_unit(unit)
-        for m in moves:
-            child_state = state.make_move(unit, m)
-            node.children.append(Node(child_state, node))
-
-        # attacks
-        attacks = state.get_legal_attack_range_of_unit(unit)
-        for t in attacks:
-            child_state = state.attack(unit, t)
-            node.children.append(Node(child_state, node))
+        for u in units:
+            if u.health <= 0:
+                continue
+            for action in state.get_legal_actions(u):
+                child_state = state.perform_action(u, action)
+                child = Node(child_state, parent=node, action=action, unit=u)
+                node.children.append(child)
 
     def _simulate(self, state):
-        """Light-weight random playout with neutral action selection."""
         cur = state.clone()
         depth = 0
         while not cur.is_game_over() and depth < self.rollout_depth:
@@ -101,26 +75,12 @@ class MonteCarloTreeSearchImplementation:
             if not units:
                 break
             u = random.choice(units)
-
-            # Collect all possible actions
-            actions = []
-            attacks = cur.get_legal_attack_range_of_unit(u)
-            moves = cur.get_legal_move_range_of_unit(u)
-            actions += [("attack", t) for t in attacks]
-            actions += [("move", m) for m in moves]
-
+            actions = cur.get_legal_actions(u)
             if not actions:
                 break
-
-            # Pick a random action (attack or move) equally likely
-            kind, target = random.choice(actions)
-            if kind == "attack":
-                cur = cur.attack(u, target)
-            else:
-                cur = cur.make_move(u, target)
-
+            action = random.choice(actions)
+            cur = cur.perform_action(u, action)
             depth += 1
-
         return cur.reward()
 
     def _backpropagate(self, node, reward):

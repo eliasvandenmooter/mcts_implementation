@@ -4,12 +4,14 @@ import random
 import math
 import copy
 
+
 class DucklingWarsState:
     """
     Efficient game state for Duckling Wars:
-    - Uses lightweight cloning.
-    - Units stored in Position.unit with unit.position_id.
-    - Move/attack return NEW state.
+    Compatible with MCTS pipeline:
+    - clone() for safe rollouts
+    - unified get_legal_actions / perform_action
+    - reward() for backpropagation
     """
 
     def __init__(self, current_army, board, army_turn=0, unit_turn=0):
@@ -19,7 +21,7 @@ class DucklingWarsState:
         self.unit_turn = unit_turn
         self.size = int(math.sqrt(len(board)))
 
-    # ---------------- helper ----------------
+    # ---------------- helpers ----------------
     def get_position(self, x, y):
         return next((p for p in self.board if p.x == x and p.y == y), None)
 
@@ -33,9 +35,6 @@ class DucklingWarsState:
         return list({p.unit.army for p in self.board if p.unit})
 
     def copy(self):
-        """
-        Return a deep copy of the state, including units, board, and current army.
-        """
         return copy.deepcopy(self)
 
     # ---------------- clone ----------------
@@ -58,7 +57,7 @@ class DucklingWarsState:
         pos = self.get_position_by_id(unit.position_id)
         if not pos:
             return []
-        max_range = 2 if unit.unit_category == "archer" else 1
+        max_range = 3 if unit.unit_category == "archer" else 2
         moves = []
         for dx in range(-max_range, max_range+1):
             for dy in range(-max_range, max_range+1):
@@ -89,7 +88,7 @@ class DucklingWarsState:
         pos = self.get_position_by_id(unit.position_id)
         if not pos:
             return []
-        attack_range = 3 if unit.unit_category == "archer" else 1
+        attack_range = 4 if unit.unit_category == "archer" else 3
         targets = []
         for dx in range(-attack_range, attack_range+1):
             for dy in range(-attack_range, attack_range+1):
@@ -106,12 +105,33 @@ class DucklingWarsState:
         target = new_state.get_position_by_id(target_pos.id)
         if not attacker or not target or not target.unit:
             return new_state
-        damage = 1 if attacker.unit_category == "archer" else 2
+        damage = 2 if attacker.unit_category == "archer" else 3
         target.unit.health -= damage
         attacker.already_attacked = True
         if target.unit.health <= 0:
             target.unit = None
         return new_state
+
+    # ---------------- unified actions ----------------
+    def get_legal_actions(self, unit):
+        """Return unified actions: ('move', Position) or ('attack', Position)."""
+        if not unit:
+            return []
+        actions = []
+        for m in self.get_legal_move_range_of_unit(unit):
+            actions.append(("move", m))
+        for a in self.get_legal_attack_range_of_unit(unit):
+            actions.append(("attack", a))
+        return actions
+
+    def perform_action(self, unit, action):
+        """Apply ('move', pos) or ('attack', pos). Returns new state."""
+        kind, target = action
+        if kind == "move":
+            return self.make_move(unit, target)
+        elif kind == "attack":
+            return self.attack(unit, target)
+        return self.clone()
 
     # ---------------- end / reward ----------------
     def is_game_over(self):
@@ -124,9 +144,6 @@ class DucklingWarsState:
         return curr_army_health - opp_health
 
     def is_terminal(self):
-        """
-        Returns True if one of the armies has no living units left.
-        """
         armies = self.get_all_armies()
         for army in armies:
             if all(u.health <= 0 for u in self.get_units_of_army(army)):
@@ -134,32 +151,26 @@ class DucklingWarsState:
         return False
 
     def get_winner(self):
-        """
-        Returns the army that won, or None if the game is still ongoing.
-        """
         armies = self.get_all_armies()
         alive = {a: [u for u in self.get_units_of_army(a) if u.health > 0] for a in armies}
-
         still_alive = [a for a, units in alive.items() if len(units) > 0]
 
         if len(still_alive) == 1:
-            return still_alive[0]  # only one army remains
+            return still_alive[0]
         elif len(still_alive) == 0:
-            return "Draw"  # edge case: both wiped out
-        return None  # ongoing
+            return "Draw"
+        return None
 
     # ---------------- sample generator ----------------
     @staticmethod
     def generate_sample_game_state(board_size=5, armies=("AI", "Opponent")):
         board = []
         pid = 0
-        # create board positions
         for y in range(board_size):
             for x in range(board_size):
                 board.append(Position(str(pid), x, y))
                 pid += 1
 
-        # place one soldier and one archer per army
         for army in armies:
             for unit_type in ["soldier", "archer"]:
                 empty_positions = [p for p in board if p.unit is None]
@@ -168,4 +179,3 @@ class DucklingWarsState:
                 chosen_pos.unit = u
 
         return DucklingWarsState(current_army=armies[0], board=board)
-

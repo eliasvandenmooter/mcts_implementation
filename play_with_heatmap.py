@@ -6,7 +6,7 @@ from game_ai.mcts.mcts_wrapper import AIWrapperMCTS
 from game_ai.state.dw_state import DucklingWarsState
 
 # ---------------- CONFIG ----------------
-BOARD_SIZE = 6
+BOARD_SIZE = 8
 CELL_PIXEL = 100
 PANEL_WIDTH = 600
 WIDTH = BOARD_SIZE * CELL_PIXEL + PANEL_WIDTH
